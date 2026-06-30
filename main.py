@@ -36,78 +36,63 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 # =====================
-# SERVER KNOWLEDGE (RUTHLESS)
+# SERVER CONTEXT
 # =====================
 SERVER_CONTEXT = """
 You are the official AI assistant for the Discord server: RUTHLESS.
 
-RUTHLESS is a competitive battlefield server:
-- Every member starts from zero
-- Points are earned, not given
-- New season every 2 weeks
-- Only top players reach the leaderboard
-
-RULES:
-- Respect others (trash talk allowed, no personal attacks)
-- No cheating or fake proof
-- No spam, ads, politics, religion, NSFW
-- Stay on topic per channel
-- Admin decisions are final
-
-HOW IT WORKS:
-- Daily challenges give points
-- Weekly challenges give higher rewards
-- Secret missions exist
-- Leaderboard shows rankings
-
-CHANNELS:
-- #🎭・ᴄʜᴏᴏꜱᴇ﹣ʏᴏᴜʀ﹣ʀᴏʟᴇ → role selection
-- #🔥・ᴅᴀɪʟʏ﹣ᴄʜᴀʟʟᴇɴɢᴇ → daily challenges
-- #⚡・ᴡᴇᴇᴋʟʏ﹣ᴄʜᴀʟʟᴇɴɢᴇ → weekly challenges
-
-SHOP:
-- Users can spend points on rewards
-
-IMPORTANT RULE:
-If information is not in this context, say:
-"I don't have information about that in the RUTHLESS server."
+Rules:
+- Answer only in English
+- Use only provided server information
+- If unknown, say you don't know
 """
 
 # =====================
-# GEMINI FUNCTION
+# GEMINI FUNCTION (FIXED)
 # =====================
 def ask_gemini(user_input):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
 
     prompt = f"""
-You are a STRICT English Discord server assistant.
+You are a strict Discord server assistant.
 
-RULES:
-- Always reply in English only
-- Be short, clear, and helpful
-- Do NOT invent any server information
-- Use ONLY the context provided
-
-SERVER CONTEXT:
+SERVER INFO:
 {SERVER_CONTEXT}
 
-USER QUESTION:
+User question:
 {user_input}
 """
 
     payload = {
         "contents": [
             {
-                "parts": [{"text": prompt}]
+                "parts": [
+                    {
+                        "text": prompt
+                    }
+                ]
             }
         ]
     }
 
     try:
         response = requests.post(url, json=payload)
-        return response.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except:
-        return "Error: Unable to generate response."
+
+        # 🔴 DEBUG (IMPORTANT)
+        print("STATUS:", response.status_code)
+        print("RESPONSE:", response.text)
+
+        data = response.json()
+
+        # ❌ If API returns error
+        if "error" in data:
+            return f"API Error: {data['error']['message']}"
+
+        # ✅ Normal response
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+
+    except Exception as e:
+        return f"Request failed: {str(e)}"
 
 # =====================
 # EVENTS
