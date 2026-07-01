@@ -104,6 +104,7 @@ def get_embedding(text):
 
     try:
         r = requests.post(url, json=payload, headers=headers)
+        print(r.text)
         data = r.json()
         return data["data"][0]["embedding"]
     except:
