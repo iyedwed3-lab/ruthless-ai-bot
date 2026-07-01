@@ -141,29 +141,53 @@ def ask_ai(text):
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://ruthless-ai-bot.onrender.com",
+        "X-Title": "Vortex"
     }
 
     payload = {
-        "model": "openai/gpt-4o-mini",
+        "model": "meta-llama/llama-3.1-8b-instruct:free",
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text}
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT
+            },
+            {
+                "role": "user",
+                "content": text
+            }
         ]
     }
 
     try:
-        r = requests.post(url, json=payload)
+        print("=== OPENROUTER REQUEST ===")
+        print("USER:", text)
+
+        r = requests.post(
+            url,
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+
+        print("STATUS:", r.status_code)
+        print("RAW RESPONSE:", r.text)
+
         data = r.json()
 
+        if r.status_code != 200:
+            return None
+
         if "error" in data:
+            print("OPENROUTER ERROR:", data["error"])
             return None
 
         return data["choices"][0]["message"]["content"]
 
-    except:
+    except Exception as e:
+        print("EXCEPTION:", str(e))
         return None
-
 # =====================
 # FALLBACK RESPONSES
 # =====================
