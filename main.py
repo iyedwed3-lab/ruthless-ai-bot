@@ -35,15 +35,7 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 # =====================
-# MEMORY SYSTEMS
-# =====================
-user_memory = {}      # ذاكرة لكل مستخدم
-chat_history = {}     # آخر محادثات
-
-MAX_HISTORY = 6
-
-# =====================
-# SERVER RULES (LOCKED AI)
+# SERVER CONTEXT
 # =====================
 SERVER_CONTEXT = """
 RUTHLESS is a competitive Discord server.
@@ -58,47 +50,58 @@ Fake proof = ban or punishment.
 No spam, cheating, or drama.
 """
 
+# =====================
+# SYSTEM PROMPT (BALANCED)
+# =====================
 SYSTEM_PROMPT = f"""
-You are Vortex AI inside the RUTHLESS Discord server.
+You are Vortex, a smart AI assistant inside the RUTHLESS Discord server.
 
-STRICT RULES:
-- You MUST ONLY use SERVER INFO below
-- If answer is not inside SERVER INFO, say:
+PERSONALITY:
+- Friendly, natural, and helpful
+- Can answer normal greetings and casual chat freely
+- Can explain who you are when asked
+
+RULES:
+- Use SERVER INFO only for server-specific questions (points, rules, seasons)
+- If question is about RUTHLESS and not in SERVER INFO, say:
 "I don't have enough information about that in the RUTHLESS system."
 
-- Do NOT give general internet explanations.
+- Do NOT invent server features
 
 SERVER INFO:
 {SERVER_CONTEXT}
+
+ABOUT YOU:
+- You were created by Iyeed
+- You are a smart assistant for the server and its members
+- You help users with server-related and general questions
 """
+
+# =====================
+# SIMPLE QUICK RESPONSES (IMPORTANT)
+# =====================
+def quick_reply(text):
+    t = text.lower()
+
+    # greetings (كل أنواع الترحيب)
+    greetings = ["hi", "hello", "hey", "yo", "sup", "good morning", "good evening"]
+    if any(g in t for g in greetings):
+        return "Hello! 👋 I'm Vortex, your assistant for the RUTHLESS server. How can I help you?"
+
+    # identity questions
+    if "who are you" in t or "what are you" in t or "what do you do" in t:
+        return (
+            "I'm Vortex, a smart AI assistant created by Iyeed for the RUTHLESS Discord server.\n"
+            "I help members with server info, points, and general questions."
+        )
+
+    return None
 
 # =====================
 # AI CALL
 # =====================
-def ask_ai(user_id, text):
+def ask_ai(text):
     url = "https://openrouter.ai/api/v1/chat/completions"
-
-    # =====================
-    # BUILD MEMORY CONTEXT
-    # =====================
-    memory = user_memory.get(user_id, "")
-
-    history = chat_history.get(user_id, [])
-
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT}
-    ]
-
-    # إضافة ذاكرة المستخدم
-    if memory:
-        messages.append({"role": "system", "content": f"User memory: {memory}"})
-
-    # إضافة آخر المحادثات
-    for msg in history:
-        messages.append(msg)
-
-    # الرسالة الحالية
-    messages.append({"role": "user", "content": text})
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -109,12 +112,14 @@ def ask_ai(user_id, text):
 
     payload = {
         "model": "openai/gpt-4o-mini",
-        "messages": messages
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": text}
+        ]
     }
 
     try:
-        r = requests.post(url, json=payload, headers=headers, timeout=30)
-
+        r = requests.post(url, headers=headers, json=payload, timeout=30)
         data = r.json()
 
         if r.status_code != 200:
@@ -123,26 +128,7 @@ def ask_ai(user_id, text):
         if "choices" not in data:
             return None
 
-        reply = data["choices"][0]["message"]["content"]
-
-        # =====================
-        # SAVE MEMORY
-        # =====================
-        chat_history.setdefault(user_id, []).append(
-            {"role": "user", "content": text}
-        )
-        chat_history[user_id].append(
-            {"role": "assistant", "content": reply}
-        )
-
-        # limit history
-        if len(chat_history[user_id]) > MAX_HISTORY:
-            chat_history[user_id] = chat_history[user_id][-MAX_HISTORY:]
-
-        # simple memory update
-        user_memory[user_id] = f"User recently talked about: {text}"
-
-        return reply
+        return data["choices"][0]["message"]["content"]
 
     except Exception as e:
         print("ERROR:", str(e))
@@ -175,7 +161,18 @@ async def on_message(message):
 
     async with message.channel.typing():
 
-        reply = ask_ai(message.author.id, text)
+        # =====================
+        # 1. QUICK RESPONSES FIRST
+        # =====================
+        quick = quick_reply(text)
+        if quick:
+            await message.reply(quick)
+            return
+
+        # =====================
+        # 2. AI IF NOT QUICK
+        # =====================
+        reply = ask_ai(text)
 
         if reply is None:
             reply = fallback()
