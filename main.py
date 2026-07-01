@@ -2,7 +2,6 @@ import discord
 import os
 import requests
 import time
-import numpy as np
 from flask import Flask
 from threading import Thread
 
@@ -36,19 +35,70 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 # =====================
-# SYSTEM PROMPT
+# MEMORY SYSTEMS
 # =====================
-SYSTEM_PROMPT = """
-You are Vortex AI.
-Always respond in English.
-Be helpful and short.
+user_memory = {}      # ذاكرة لكل مستخدم
+chat_history = {}     # آخر محادثات
+
+MAX_HISTORY = 6
+
+# =====================
+# SERVER RULES (LOCKED AI)
+# =====================
+SERVER_CONTEXT = """
+RUTHLESS is a competitive Discord server.
+
+POINT SYSTEM:
+- Daily challenges give points
+- Weekly missions give bonus points
+- Special events give rare points
+
+Seasons reset every 2 weeks.
+Fake proof = ban or punishment.
+No spam, cheating, or drama.
+"""
+
+SYSTEM_PROMPT = f"""
+You are Vortex AI inside the RUTHLESS Discord server.
+
+STRICT RULES:
+- You MUST ONLY use SERVER INFO below
+- If answer is not inside SERVER INFO, say:
+"I don't have enough information about that in the RUTHLESS system."
+
+- Do NOT give general internet explanations.
+
+SERVER INFO:
+{SERVER_CONTEXT}
 """
 
 # =====================
-# AI CALL (FIXED)
+# AI CALL
 # =====================
-def ask_ai(text):
+def ask_ai(user_id, text):
     url = "https://openrouter.ai/api/v1/chat/completions"
+
+    # =====================
+    # BUILD MEMORY CONTEXT
+    # =====================
+    memory = user_memory.get(user_id, "")
+
+    history = chat_history.get(user_id, [])
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT}
+    ]
+
+    # إضافة ذاكرة المستخدم
+    if memory:
+        messages.append({"role": "system", "content": f"User memory: {memory}"})
+
+    # إضافة آخر المحادثات
+    for msg in history:
+        messages.append(msg)
+
+    # الرسالة الحالية
+    messages.append({"role": "user", "content": text})
 
     headers = {
         "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -58,32 +108,44 @@ def ask_ai(text):
     }
 
     payload = {
-        "model": "openai/gpt-4o-mini",  # ← هذا الأكثر استقراراً
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": text}
-        ]
+        "model": "openai/gpt-4o-mini",
+        "messages": messages
     }
 
     try:
         r = requests.post(url, json=payload, headers=headers, timeout=30)
-
-        print("STATUS:", r.status_code)
-        print("RESPONSE:", r.text)
 
         data = r.json()
 
         if r.status_code != 200:
             return None
 
-        if "error" in data:
-            print("OPENROUTER ERROR:", data["error"])
+        if "choices" not in data:
             return None
 
-        return data["choices"][0]["message"]["content"]
+        reply = data["choices"][0]["message"]["content"]
+
+        # =====================
+        # SAVE MEMORY
+        # =====================
+        chat_history.setdefault(user_id, []).append(
+            {"role": "user", "content": text}
+        )
+        chat_history[user_id].append(
+            {"role": "assistant", "content": reply}
+        )
+
+        # limit history
+        if len(chat_history[user_id]) > MAX_HISTORY:
+            chat_history[user_id] = chat_history[user_id][-MAX_HISTORY:]
+
+        # simple memory update
+        user_memory[user_id] = f"User recently talked about: {text}"
+
+        return reply
 
     except Exception as e:
-        print("REQUEST FAILED:", str(e))
+        print("ERROR:", str(e))
         return None
 
 # =====================
@@ -108,9 +170,12 @@ async def on_message(message):
         return
 
     text = message.content.strip()
+    if not text:
+        return
 
     async with message.channel.typing():
-        reply = ask_ai(text)
+
+        reply = ask_ai(message.author.id, text)
 
         if reply is None:
             reply = fallback()
