@@ -12,7 +12,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 CHANNEL_ID = int(os.getenv("CHANNEL_ID"))
 
 # =====================
-# FLASK KEEP ALIVE
+# KEEP ALIVE (Render)
 # =====================
 app = Flask("")
 
@@ -35,18 +35,19 @@ intents.message_content = True
 client = discord.Client(intents=intents)
 
 # =====================
-# SERVER CONTEXT
+# SERVER KNOWLEDGE
 # =====================
 SERVER_CONTEXT = """
 RUTHLESS is a competitive Discord server.
-Users earn points through challenges and compete every 2 weeks.
+Members earn points through challenges, missions, and activity.
+The server has seasons that reset every 2 weeks.
 """
 
 # =====================
 # GEMINI FUNCTION (FIXED MODEL)
 # =====================
 def ask_gemini(user_input):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={GEMINI_API_KEY}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
 
     payload = {
         "contents": [
@@ -54,13 +55,17 @@ def ask_gemini(user_input):
                 "parts": [
                     {
                         "text": f"""
-You are a strict Discord assistant.
-Answer in English only.
+You are the official assistant for a Discord server called RUTHLESS.
 
-Context:
+Rules:
+- Always answer in English
+- Be helpful and accurate
+- If you don't know, say you don't know
+
+Server info:
 {SERVER_CONTEXT}
 
-User:
+User question:
 {user_input}
 """
                     }
@@ -72,6 +77,7 @@ User:
     try:
         response = requests.post(url, json=payload)
 
+        # Debug logs (important)
         print("STATUS:", response.status_code)
         print("RESPONSE:", response.text)
 
@@ -105,7 +111,7 @@ async def on_message(message):
         await message.reply(reply)
 
 # =====================
-# START
+# START BOT
 # =====================
 keep_alive()
 client.run(TOKEN)
